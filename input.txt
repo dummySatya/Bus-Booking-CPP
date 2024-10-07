@@ -1,0 +1,37 @@
+book 0 0 1 book 0 1 1 book 0 2 1 book 0 3 1 book 0 4 1
+select 1 0 1 select 1 2 1 select 1 3 1
+book 1 0 1 book 1 1 1 book 1 2 1 book 1 3 1 book 1 4 1
+book 2 1 1 book 3 0 1 
+cancel 0 0 1 cancel 0 1 1 cancel 0 2 1 cancel 0 3 1
+book 3 0 1 book 3 1 1 book 3 3 1 book 3 4 1
+details
+
+
+Todo Today
+Merger Possiblities (consider selected seats as empty ones)
+Merge function
+Add admin option to input
+    Show Possiblities
+    Merge with bus1 and bus2
+Make changes in main() such that u have a admin login as separate input for merger purpose
+
+todo
+loadfactor doesnt work, smth wrong with .bookedSeats attr
+loadchanger, say one books 4/5 seats, that 0.8, so busesexceeding increases by one, but then someone books 5th seat, then again loadchanger is called and busesexceeding increases again but that shouldnt happen
+loadchanger func increases the busesexceeding load on booking, but never decreases it on canceling
+
+mapping required for seat to client details
+    map
+    busNos:{seatNo: clientID}
+changing clients details when merging or book or cancel happens
+forked server doesnt show up changes
+
+
+todo
+resolved : ->>> ****server doent take multiple clients 
+resolved: check for inputs
+resolved : exit on client kills the server itself
+admin login for system
+
+
+locks make sure that only one thread enters a critical section
