@@ -851,17 +851,11 @@ int main()
         string mode = buffer;
         if (mode == "admin")
         {
-            std::thread adminThread([&server, new_socket]()
-                                    { server.serveAdminSocket(new_socket); });
-            logWriter("SUCCESS ADMIN THREAD CREATED");
-            adminThread.detach();
+            server.serveAdminSocket(new_socket);
         }
         else if (mode == "client")
         {
-            std::thread clientThread([&server, new_socket]()
-                                     { server.serveClientSocket(new_socket); });
-            logWriter("SUCCESS CLIENT THREAD CREATED");
-            clientThread.detach(); // Detach to handle clients asynchronously
+            server.serveClientSocket(new_socket);
         }
         else
         {

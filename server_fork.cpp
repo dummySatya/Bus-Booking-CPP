@@ -64,12 +64,13 @@ void logWriter(string logText)
 }
 class BusBooking
 {
+
 protected:
     struct Client
     {
-        map<int, set<int>> seatsBooked; // bus:seats mapping
+        int seatsBooked[MAX_BUSES][MAX_SEATS]; // bus:seats mapping
         // chose set over vector bcs deletion is much more costlier in vector
-        map<int, set<int>> seatsSelected;
+        int seatsSelected[MAX_BUSES][MAX_SEATS];
     };
     struct Bus
     {
@@ -77,17 +78,18 @@ protected:
         chrono::time_point<chrono::steady_clock> seatLockDurations[MAX_SEATS];
         int bookedSeats;
         bool active;        // is false only when some merger has happened
-        bool loadExceeding; // to set the flag to true only when first time the bus exceedingm so that even if seat is booked on an overloaded bus, the busesExceeding wont again trigger and increment, also becomes false if load less than threshhold
+        bool loadExceeding;
     };
-
-    Bus buses[MAX_BUSES];
-    Client clients[MAX_CLIENTS];
-    unordered_map<int, unordered_map<int, int>> seatToClientMap;
-    int emptyBuses[MAX_BUSES];    // array of empty buses
-    int *numEmptyBuses = new int; // empty buses are only formed after a merger
-    int *totalBuses = new int;
-    int *busesExceedingLoad = new int;
-    // initializing it bcs it not would lead to segerr
+    struct data{
+        Bus buses[MAX_BUSES];
+        Client clients[MAX_CLIENTS];
+        int seatToClientMap[MAX_BUSES][MAX_SEATS];
+        int emptyBuses[MAX_BUSES];    // array of empty buses
+        int numEmptyBuses; // empty buses are only formed after a merger
+        int totalBuses;
+        int busesExceedingLoad;
+        // initializing it bcs it not would lead to segerr
+    };
 public:
     BusBooking() // initial no. of buses
     {
@@ -102,12 +104,14 @@ public:
             bus.active = true;
             bus.loadExceeding = false;
         }
-        *totalBuses = INITIAL_BUSES;
-        *busesExceedingLoad = 0;
-        *numEmptyBuses = 0;
+        totalBuses = INITIAL_BUSES;
+        busesExceedingLoad = 0;
+        numEmptyBuses = 0;
         logWriter("INITIALIZE BUSES");
     }
     // virtual ~BusBooking() {}
+
+    // pair<int,vector<int>>clientSeats()
 
     void printer()
     {
@@ -122,13 +126,13 @@ public:
             cout << endl;
             cout << "Booked Seats: " << bus.bookedSeats << endl;
         }
-        cout << "Total Buses: " << (*totalBuses) << endl;
-        cout << "No. of empty buses(post merger formed): " << (*numEmptyBuses) << endl;
+        cout << "Total Buses: " << (totalBuses) << endl;
+        cout << "No. of empty buses(post merger formed): " << (numEmptyBuses) << endl;
         cout << "Empty Buses (post merger): " << endl;
-        for (int i = 0; i < (*numEmptyBuses); i++)
+        for (int i = 0; i < (numEmptyBuses); i++)
             cout << emptyBuses[i] << " ";
         cout << endl;
-        cout << "Buses exceeding load: " << (*busesExceedingLoad) << endl;
+        cout << "Buses exceeding load: " << (busesExceedingLoad) << endl;
     }
 
     int clientDetails(int clientID)
@@ -188,11 +192,11 @@ public:
     void busAdder()
     {
         logWriter("TRIGGERED BUSES ADDITION on overload");
-        int busesExpansion = BUSES_TO_BE_ADDED - *numEmptyBuses;
+        int busesExpansion = BUSES_TO_BE_ADDED - numEmptyBuses;
         if (busesExpansion > 0)
         {
             //
-            for (int bus = 0; bus < *numEmptyBuses; bus++)
+            for (int bus = 0; bus < numEmptyBuses; bus++)
             {
                 int busid = emptyBuses[bus];
                 for (int i = 0; i < MAX_SEATS; i++)
@@ -203,18 +207,18 @@ public:
                 buses[busid].bookedSeats = 0;
                 buses[busid].loadExceeding = false;
             }
-            (*totalBuses) += (*numEmptyBuses);
-            *numEmptyBuses = 0;
+            (totalBuses) += (numEmptyBuses);
+            numEmptyBuses = 0;
             for (int busesToBeAdded = 0; busesToBeAdded < busesExpansion; busesToBeAdded++)
             {
                 for (int i = 0; i < MAX_SEATS; i++)
                 {
-                    buses[(*totalBuses)].seats[i] = 1;
+                    buses[(totalBuses)].seats[i] = 1;
                 }
-                buses[(*totalBuses)].active = true;
-                buses[(*totalBuses)].bookedSeats = 0;
-                buses[(*totalBuses)].loadExceeding = false;
-                (*totalBuses)++;
+                buses[(totalBuses)].active = true;
+                buses[(totalBuses)].bookedSeats = 0;
+                buses[(totalBuses)].loadExceeding = false;
+                (totalBuses)++;
             }
         }
         else
@@ -229,9 +233,9 @@ public:
                 buses[busid].active = true;
                 buses[busid].bookedSeats = 0;
                 buses[busid].loadExceeding = false;
-                (*numEmptyBuses)--;
+                (numEmptyBuses)--;
             }
-            *totalBuses += BUSES_TO_BE_ADDED;
+            totalBuses += BUSES_TO_BE_ADDED;
         }
         logWriter("SUCCESS BUSES ADDED " + to_string(BUSES_TO_BE_ADDED) + " buses added");
     }
@@ -243,14 +247,14 @@ public:
         if ((!buses[busID].loadExceeding) && checkLoadExceeds(load)) // during book
         {
             buses[busID].loadExceeding = true;
-            ++(*busesExceedingLoad);
+            ++(busesExceedingLoad);
         }
         else if (buses[busID].loadExceeding && (!checkLoadExceeds(load))) // during cancel
         {
             buses[busID].loadExceeding = false;
-            --(*busesExceedingLoad);
+            --(busesExceedingLoad);
         }
-        if ((*busesExceedingLoad) == (*totalBuses))
+        if ((busesExceedingLoad) == (totalBuses))
         {
             busAdder();
         }
@@ -337,9 +341,9 @@ public:
                 }
             }
         }
-        emptyBuses[(*numEmptyBuses)++] = bus2;
+        emptyBuses[(numEmptyBuses)++] = bus2;
         buses[bus2].active = false;
-        (*totalBuses)--;
+        (totalBuses)--;
         logWriter("SUCCESS MERGER FOR Bus ID " + to_string(bus1) + " and Bus ID" + to_string(bus2));
         return true;
     }

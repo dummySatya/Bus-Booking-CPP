@@ -7,7 +7,7 @@
 #include <arpa/inet.h>
 
 #define INITIAL_BUSES 20
-#define MAX_CLIENTS 10000
+#define MAX_CLIENTS 1000
 #define MAX_BUSES 100
 #define MAX_SEATS 30
 #define TIMER 60
@@ -776,7 +776,7 @@ int main()
                         {
         while (true) {
             logFileWriter(); // calling log func every 3 seconds to log all activities
-            std::this_thread::sleep_for(std::chrono::seconds(3)); 
+            this_thread::sleep_for(chrono::seconds(3)); 
         } });
     loggerThread.detach();
     int server_fd, new_socket;
@@ -825,7 +825,7 @@ int main()
                        {
         while (true) {
             server.timerEvents(); 
-            std::this_thread::sleep_for(std::chrono::seconds(3)); 
+            this_thread::sleep_for(chrono::seconds(3)); 
         } });
     logWriter("SUCCESS TIMER THREAD CREATED");
 
@@ -851,14 +851,14 @@ int main()
         string mode = buffer;
         if (mode == "admin")
         {
-            std::thread adminThread([&server, new_socket]()
+            thread adminThread([&server, new_socket]()
                                     { server.serveAdminSocket(new_socket); });
             logWriter("SUCCESS ADMIN THREAD CREATED");
             adminThread.detach();
         }
         else if (mode == "client")
         {
-            std::thread clientThread([&server, new_socket]()
+            thread clientThread([&server, new_socket]()
                                      { server.serveClientSocket(new_socket); });
             logWriter("SUCCESS CLIENT THREAD CREATED");
             clientThread.detach(); // Detach to handle clients asynchronously
