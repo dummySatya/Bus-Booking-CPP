@@ -9,7 +9,7 @@ PORT = 8081
 ACTIONS = ['book', 'select', 'cancel']
 ACTION_PROBABILITY = [0.9, 0.05, 0.05]  # 90% book, 5% select, 5% cancel
 
-MAX_CLIENTS = 1000  # Number of clients for load test
+MAX_CLIENTS = 2  # Number of clients for load test
 ITERATIONS = 100    # Number of actions each client performs
 INITIAL_BUSES = 20  # Initial number of buses
 MAX_BUSES = 100     # Maximum number of buses

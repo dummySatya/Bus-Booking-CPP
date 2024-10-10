@@ -35,3 +35,22 @@ admin login for system
 
 
 locks make sure that only one thread enters a critical section
+
+client{
+    int busesBooked[MAX_BUSES]; = 1 => yes ,-1 otherwise
+    int busesSelected[MAX_BUSES];
+    to check if any seat is also booked by client or not;
+}
+
+
+DO INITILIZE THE ARRAY WITH WHATEVER IS THE DEFAULT VALS
+client[i].seatsBooked<map<set>>
+=> busid : {seat1,seat2,seat3...}
+insert,erase(bus and seat), find(busid), size(busid)
+
+seatToClientMap[bus][seat] = clientID
+                            = -1 if not
+seatsBooked[busid][seatno] = 1 =>booked
+                           = -1 =>not booked
+
+book => client(busesBooked,seatsbooked) , seattoclientmap

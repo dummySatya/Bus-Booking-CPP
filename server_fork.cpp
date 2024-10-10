@@ -12,12 +12,13 @@
 #define MAX_CLIENTS 10000
 #define MAX_BUSES 100
 #define MAX_SEATS 30
-#define TIMER 60
+#define TIMER 30
 #define BUSES_TO_BE_ADDED 2
 #define LOAD_EXCEED_FACTOR 0.8
 #define LOAD_LESS_FACTOR 0.2
 
 #define PORT 8081
+#define MAX_BUFFER 10000
 
 // Custom return codes
 #define CLIENT_INFO_INVALID_CLIENT 900                  // Enter a valid client ID
@@ -38,7 +39,6 @@
 
 using namespace std;
 
-mutex fileMtx;
 
 queue<string> logQueue;
 
@@ -56,13 +56,15 @@ void logFileWriter()
 }
 void logWriter(string logText)
 {
-    lock_guard<mutex> lock(fileMtx);
     auto sysNow = chrono::system_clock::now();
     auto timeCFormat = chrono::system_clock::to_time_t(sysNow);
     string currTime = ctime(&timeCFormat);
     currTime.replace(currTime.size() - 1, 1, ""); // to remove the \n from ctime returned string
     logText = currTime + " : " + logText + "\n";
-    logQueue.push(logText);
+    auto ptr = fopen("archive.txt","a");
+    fprintf(ptr, "%s", logText.c_str());
+    fclose(ptr);
+    // logQueue.push(logText);
 }
 class BusBooking
 {
@@ -87,6 +89,7 @@ protected:
     
 public:
     struct Data{
+        pthread_mutex_t mutex;
         Bus buses[MAX_BUSES];
         Client clients[MAX_CLIENTS];
         int seatToClientMap[MAX_BUSES][MAX_SEATS];
@@ -102,17 +105,17 @@ public:
     {
         initialize();
     }
-
-    // BusBooking Constructor to initialize buses
     void initialize() 
     {
+        pthread_mutexattr_t mutextAttr;
+        pthread_mutexattr_init(&mutextAttr);
+        pthread_mutexattr_setpshared(&mutextAttr, PTHREAD_PROCESS_SHARED);
+        pthread_mutex_init(&sharedData->mutex,&mutextAttr);
+        
         for (int c = 0; c < INITIAL_BUSES; c++)
         {
             auto &bus = sharedData->buses[c];
-            for (int i = 0; i < MAX_SEATS; i++)
-            {
-                bus.seats[i] = 1; // Initialize all seats as free
-            }
+            fill(bus.seats,bus.seats+MAX_SEATS,1);
             bus.bookedSeats = 0;
             bus.active = true;
             bus.loadExceeding = false;
@@ -120,12 +123,21 @@ public:
         sharedData->totalBuses = INITIAL_BUSES;
         sharedData->busesExceedingLoad = 0;
         sharedData->numEmptyBuses = 0;
+        for(int i = 0;i <MAX_BUSES; i++){
+            fill(sharedData->seatToClientMap[i],sharedData->seatToClientMap[i] + MAX_SEATS,-1);
+        }
+
+        for(int clientID = 0; clientID < MAX_CLIENTS; clientID++){
+            auto &data = sharedData->clients[clientID];
+            fill(data.busesBooked,data.busesBooked + MAX_BUSES,-1);
+            fill(data.busesSelected,data.busesSelected + MAX_BUSES,-1);
+            for(int i = 0;i <MAX_BUSES; i++){
+                fill(data.seatsBooked[i],data.seatsBooked[i] + MAX_SEATS,-1);
+                fill(data.seatsSelected[i],data.seatsSelected[i] + MAX_SEATS,-1);
+            }
+
+        }
     }
-
-    // virtual ~BusBooking() {}
-
-    // pair<int,vector<int>>clientSeats()
-
     void printer()
     {
         for (int i = 0; i < MAX_BUSES; i++)
@@ -230,10 +242,7 @@ public:
             for (int bus = 0; bus < sharedData->numEmptyBuses; bus++)
             {
                 int busid = sharedData->emptyBuses[bus];
-                for (int i = 0; i < MAX_SEATS; i++)
-                {
-                    sharedData->buses[busid].seats[i] = 1;
-                }
+                fill(sharedData->buses[busid].seats, sharedData->buses[busid].seats + MAX_SEATS,1);
                 sharedData->buses[busid].active = true;
                 sharedData->buses[busid].bookedSeats = 0;
                 sharedData->buses[busid].loadExceeding = false;
@@ -246,6 +255,7 @@ public:
                 {
                     sharedData->buses[(sharedData->totalBuses)].seats[i] = 1;
                 }
+                fill(sharedData->buses[(sharedData->totalBuses)].seats, sharedData->buses[(sharedData->totalBuses)].seats + MAX_SEATS,1);
                 sharedData->buses[(sharedData->totalBuses)].active = true;
                 sharedData->buses[(sharedData->totalBuses)].bookedSeats = 0;
                 sharedData->buses[(sharedData->totalBuses)].loadExceeding = false;
@@ -261,6 +271,7 @@ public:
                 {
                     sharedData->buses[busid].seats[i] = 1;
                 }
+                fill(sharedData->buses[busid].seats, sharedData->buses[busid].seats + MAX_SEATS,1);
                 sharedData->buses[busid].active = true;
                 sharedData->buses[busid].bookedSeats = 0;
                 sharedData->buses[busid].loadExceeding = false;
@@ -453,6 +464,7 @@ public:
         ++sharedData->buses[busID].bookedSeats;
         cout << "Booked Seats: " << sharedData->buses[busID].bookedSeats << endl;
         sharedData->clients[clientID].seatsBooked[busID][seatNo] = 1;
+        sharedData->clients[clientID].busesBooked[busID] = 1;
         if (sharedData->clients[clientID].seatsSelected[busID][seatNo] == 1)
         {
             sharedData->clients[clientID].seatsSelected[busID][seatNo] = -1;
@@ -501,7 +513,7 @@ public:
 
         if (seatStatus == 0)
         {
-            sharedData->clients[clientID].seatsBooked[busID][seatNo] = 1;
+            sharedData->clients[clientID].seatsBooked[busID][seatNo] = -1;
             if (countSeats(sharedData->clients[clientID].seatsBooked[busID]) == 0)
             {
                 sharedData->clients[clientID].busesBooked[busID] = -1;
@@ -561,6 +573,7 @@ public:
         sharedData->buses[busID].seats[seatNo] = 2;
         sharedData->buses[busID].seatLockDurations[seatNo] = chrono::steady_clock::now();
         sharedData->clients[clientID].seatsSelected[busID][seatNo] = 1;
+        sharedData->clients[clientID].busesSelected[busID] = 1;
         sharedData->seatToClientMap[busID][seatNo] = clientID;
         cout << "Client" << clientID << " selected seat " << seatNo << " on bus id " << busID << endl;
         logWriter("SUCCESS SELECTING Bus ID " + to_string(busID) + " Seat No. " + to_string(seatNo) + " Client ID" + to_string(clientID));
@@ -570,6 +583,7 @@ public:
 
     void timerEvents()
     {
+        pthread_mutex_lock(&sharedData->mutex);
         auto now = chrono::steady_clock::now();
         for (int bus = 0; bus < MAX_BUSES; ++bus)
         {
@@ -593,41 +607,37 @@ public:
                 }
             }
         }
+        pthread_mutex_unlock(&sharedData->mutex);
     }
 };
 
 class Server : public BusBooking
 {
-public:
-    mutex mtx;
-
 protected:
     int serveClient(int busID, int seatNo, int clientID, string action)
     {
         logWriter("TRIGGERED SERVE CLIENT Action: " + action + " Bus ID " + to_string(busID) + " Seat No. " + to_string(seatNo) + " Client ID" + to_string(clientID));
 
         int status = 0;
+        pthread_mutex_lock(&sharedData->mutex);
         if (action == "select")
         {
-            lock_guard<mutex> lock(mtx);
             status = selectSeat(busID, seatNo, clientID);
         }
         else if (action == "book")
         {
-            lock_guard<mutex> lock(mtx);
             status = bookSeat(busID, seatNo, clientID);
         }
         else if (action == "cancel")
         {
-            lock_guard<mutex> lock(mtx);
             status = cancelSeat(busID, seatNo, clientID);
         }
         else if (action == "details")
         {
-            lock_guard<mutex> lock(mtx);
             status = clientDetails(clientID);
             printer();
         }
+        pthread_mutex_unlock(&sharedData->mutex);
         logWriter("SUCCESS SERVE CLIENT Action: " + action + " Bus ID " + to_string(busID) + " Seat No. " + to_string(seatNo) + " Client ID" + to_string(clientID));
         return status;
     }
@@ -638,13 +648,13 @@ public:
     {
         logWriter("TRIGGERED SERVE ADMIN SOCKET socket_fd: " + to_string(socket_fd));
 
-        char buffer[1024] = {0};
+        char buffer[MAX_BUFFER] = {0};
         cout << "Admin Connected: " << socket_fd << endl;
         string response = "Admin Login Success\n";
         send(socket_fd, response.c_str(), response.size(), 0);
         logWriter("SUCCESS ADMIN CONNECTED");
 
-        int bytes_received = recv(socket_fd, buffer, 1024, 0); // Get action (show or merge)
+        int bytes_received = recv(socket_fd, buffer, MAX_BUFFER, 0); // Get action (show or merge)
         if (bytes_received <= 0)
         {
             cout << "Admin disconnected or error occurred." << endl;
@@ -654,15 +664,16 @@ public:
         }
         while (true)
         {
-            char actionBuffer[1024] = {0};
+            char actionBuffer[MAX_BUFFER] = {0};
             int bus1, bus2;
             sscanf(buffer, "%s %d %d", actionBuffer, &bus1, &bus2);
             string action = actionBuffer;
 
             vector<pair<int, int>> mergePossibilityVector;
             {
-                lock_guard<mutex> lock(mtx);
+                pthread_mutex_lock(&sharedData->mutex);
                 mergePossibilityVector = mergerPossiblities();
+                pthread_mutex_unlock(&sharedData->mutex);
             }
 
             if (action == "show")
@@ -692,7 +703,9 @@ public:
                 cout << "Merger Called for " << bus1 << " and " << bus2 << endl;
                 if (bus1 >= 0 && bus1 < MAX_BUSES && bus2 >= 0 && bus2 < MAX_BUSES)
                 {
+                    pthread_mutex_lock(&sharedData->mutex);
                     bool mergeStatus = merge(bus1, bus2, mergePossibilityVector);
+                    pthread_mutex_unlock(&sharedData->mutex);
                     if (mergeStatus)
                     {
                         response = "Merger Complete\n";
@@ -717,7 +730,7 @@ public:
                 send(socket_fd, response.c_str(), response.size(), 0);
                 logWriter("FAILED ADMIN ACTION INVALID ACTION");
             }
-            bytes_received = recv(socket_fd, buffer, 1024, 0);
+            bytes_received = recv(socket_fd, buffer, MAX_BUFFER, 0);
             if (bytes_received <= 0)
             {
                 cout << "Admin disconnected or error occurred during action." << endl;
@@ -732,14 +745,14 @@ public:
     void serveClientSocket(int socket_fd)
     {
         logWriter("TRIGGERED SERVE CLIENT SOCKET socket_fd: " + to_string(socket_fd));
-        char buffer[1024] = {0};
+        char buffer[MAX_BUFFER] = {0};
         int clientID;
         cout << "Client Connected: " << socket_fd << endl;
         logWriter("SUCCESS CLIENT CONNECTED");
         string response = "Mode selection Success\n";
         send(socket_fd, response.c_str(), response.size(), 0);
 
-        int bytes_received = recv(socket_fd, buffer, 1024, 0); // getting client ID
+        int bytes_received = recv(socket_fd, buffer, MAX_BUFFER, 0); // getting client ID
         if (bytes_received <= 0)
         {
             cout << "Client disconnected or error occurred." << endl;
@@ -790,7 +803,7 @@ public:
             }
 
             string action;
-            char actionBuffer[1024];
+            char actionBuffer[MAX_BUFFER];
             int busID, seatNo;
             sscanf(buffer, "%s %d %d", actionBuffer, &busID, &seatNo);
             action = actionBuffer;
@@ -840,13 +853,13 @@ int main()
     // Initialize the BusBooking class with shared memory
     Server server(sharedData);
 
-    thread loggerThread([]()
-                        {
-        while (true) {
-            logFileWriter(); // calling log func every 3 seconds to log all activities
-            std::this_thread::sleep_for(std::chrono::seconds(3)); 
-        } });
-    loggerThread.detach();
+    // thread loggerThread([]()
+    //                     {
+    //     while (true) {
+    //         logFileWriter(); // calling log func every 3 seconds to log all activities
+    //         std::this_thread::sleep_for(std::chrono::seconds(3)); 
+    //     } });
+    // loggerThread.detach();
 
     int server_fd, new_socket;
     struct sockaddr_in address;
@@ -913,8 +926,8 @@ int main()
 
         cout << "Connection Accepted" << endl;
         logWriter("SUCCESS CLIENT CONNECTED");
-
         // Fork a new process for each client connection
+
         pid_t pid = fork();
 
         if (pid < 0)
@@ -929,8 +942,8 @@ int main()
             // Child process: handle client request
             close(server_fd); // Child doesn't need the listening socket
 
-            char buffer[1024] = {0};
-            int bytes_received = recv(new_socket, buffer, 1024, 0);
+            char buffer[MAX_BUFFER] = {0};
+            int bytes_received = recv(new_socket, buffer, MAX_BUFFER, 0);
             string mode = buffer;
 
             if (mode == "admin")
