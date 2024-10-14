@@ -39,33 +39,28 @@
 
 using namespace std;
 
-
-queue<string> logQueue;
-
-void logFileWriter()
-{
-    int n = logQueue.size();
-    auto ptr = fopen("archive.txt", "a");
-    while (n--)
-    {
-        string logText = logQueue.front();
-        fprintf(ptr, "%s", logText.c_str());
-        logQueue.pop();
-    }
-    fclose(ptr);
-}
 void logWriter(string logText)
 {
     auto sysNow = chrono::system_clock::now();
     auto timeCFormat = chrono::system_clock::to_time_t(sysNow);
     string currTime = ctime(&timeCFormat);
-    currTime.replace(currTime.size() - 1, 1, ""); // to remove the \n from ctime returned string
-    logText = currTime + " : " + logText + "\n";
-    auto ptr = fopen("archive.txt","a");
-    fprintf(ptr, "%s", logText.c_str());
+    currTime.replace(currTime.size() - 1, 1, ""); // Remove the \n from the ctime string
+
+    logText = currTime + " : " + logText;
+
+    FILE *ptr = fopen("archive.txt", "a");
+    if (ptr == nullptr)
+    { // Check if file opening failed
+        perror("Error opening file");
+        return;
+    }
+
+    fprintf(ptr, "%s\n", logText.c_str());
+
+    fflush(ptr);
     fclose(ptr);
-    // logQueue.push(logText);
 }
+
 class BusBooking
 {
 
@@ -83,39 +78,40 @@ protected:
         int seats[MAX_SEATS]; // 0 booked, 1 free, 2 locked
         chrono::time_point<chrono::steady_clock> seatLockDurations[MAX_SEATS];
         int bookedSeats;
-        bool active;        // false when a merger happens
+        bool active; // false when a merger happens
         bool loadExceeding;
     };
-    
+
 public:
-    struct Data{
+    struct Data
+    {
         pthread_mutex_t mutex;
         Bus buses[MAX_BUSES];
         Client clients[MAX_CLIENTS];
         int seatToClientMap[MAX_BUSES][MAX_SEATS];
-        int emptyBuses[MAX_BUSES];    // array of empty buses
-        int numEmptyBuses; // empty buses are only formed after a merger
+        int emptyBuses[MAX_BUSES]; // array of empty buses
+        int numEmptyBuses;         // empty buses are only formed after a merger
         int totalBuses;
         int busesExceedingLoad;
     };
 
-    Data * sharedData;
+    Data *sharedData;
 
-    BusBooking(Data* sharedDataPtr) : sharedData(sharedDataPtr) 
+    BusBooking(Data *sharedDataPtr) : sharedData(sharedDataPtr)
     {
         initialize();
     }
-    void initialize() 
+    void initialize()
     {
         pthread_mutexattr_t mutextAttr;
         pthread_mutexattr_init(&mutextAttr);
         pthread_mutexattr_setpshared(&mutextAttr, PTHREAD_PROCESS_SHARED);
-        pthread_mutex_init(&sharedData->mutex,&mutextAttr);
-        
+        pthread_mutex_init(&sharedData->mutex, &mutextAttr);
+
         for (int c = 0; c < INITIAL_BUSES; c++)
         {
             auto &bus = sharedData->buses[c];
-            fill(bus.seats,bus.seats+MAX_SEATS,1);
+            fill(bus.seats, bus.seats + MAX_SEATS, 1);
             bus.bookedSeats = 0;
             bus.active = true;
             bus.loadExceeding = false;
@@ -123,19 +119,21 @@ public:
         sharedData->totalBuses = INITIAL_BUSES;
         sharedData->busesExceedingLoad = 0;
         sharedData->numEmptyBuses = 0;
-        for(int i = 0;i <MAX_BUSES; i++){
-            fill(sharedData->seatToClientMap[i],sharedData->seatToClientMap[i] + MAX_SEATS,-1);
+        for (int i = 0; i < MAX_BUSES; i++)
+        {
+            fill(sharedData->seatToClientMap[i], sharedData->seatToClientMap[i] + MAX_SEATS, -1);
         }
 
-        for(int clientID = 0; clientID < MAX_CLIENTS; clientID++){
+        for (int clientID = 0; clientID < MAX_CLIENTS; clientID++)
+        {
             auto &data = sharedData->clients[clientID];
-            fill(data.busesBooked,data.busesBooked + MAX_BUSES,-1);
-            fill(data.busesSelected,data.busesSelected + MAX_BUSES,-1);
-            for(int i = 0;i <MAX_BUSES; i++){
-                fill(data.seatsBooked[i],data.seatsBooked[i] + MAX_SEATS,-1);
-                fill(data.seatsSelected[i],data.seatsSelected[i] + MAX_SEATS,-1);
+            fill(data.busesBooked, data.busesBooked + MAX_BUSES, -1);
+            fill(data.busesSelected, data.busesSelected + MAX_BUSES, -1);
+            for (int i = 0; i < MAX_BUSES; i++)
+            {
+                fill(data.seatsBooked[i], data.seatsBooked[i] + MAX_SEATS, -1);
+                fill(data.seatsSelected[i], data.seatsSelected[i] + MAX_SEATS, -1);
             }
-
         }
     }
     void printer()
@@ -160,17 +158,21 @@ public:
         cout << "Buses exceeding load: " << (sharedData->busesExceedingLoad) << endl;
     }
 
-    void seatsClient(int clientID){
+    void seatsClient(int clientID)
+    {
         auto &client = sharedData->clients[clientID];
-        for(int busID = 0; busID < MAX_BUSES; busID++){
-            if(client.busesBooked[busID] == 1){
+        for (int busID = 0; busID < MAX_BUSES; busID++)
+        {
+            if (client.busesBooked[busID] == 1)
+            {
                 cout << "BusID " << busID << " : ";
-                for(int seatNo = 0; seatNo < MAX_SEATS; seatNo++){
-                    if(client.seatsBooked[busID][seatNo] == 1){
-                        cout<< seatNo<< " ";
+                for (int seatNo = 0; seatNo < MAX_SEATS; seatNo++)
+                {
+                    if (client.seatsBooked[busID][seatNo] == 1)
+                    {
+                        cout << seatNo << " ";
                     }
                 }
-
             }
         }
     }
@@ -179,28 +181,36 @@ public:
         cout << "Details of Client " << clientID << endl;
         cout << "Seats Booked: " << endl;
         auto &client = sharedData->clients[clientID];
-        for(int busID = 0; busID < MAX_BUSES; busID++){
-            if(client.busesBooked[busID] == 1){
+        for (int busID = 0; busID < MAX_BUSES; busID++)
+        {
+            if (client.busesBooked[busID] == 1)
+            {
                 cout << "BusID " << busID << " : ";
-                for(int seatNo = 0; seatNo < MAX_SEATS; seatNo++){
-                    if(client.seatsBooked[busID][seatNo] == 1){
-                        cout<< seatNo<< " ";
+                for (int seatNo = 0; seatNo < MAX_SEATS; seatNo++)
+                {
+                    if (client.seatsBooked[busID][seatNo] == 1)
+                    {
+                        cout << seatNo << " ";
                     }
                 }
-                cout<<endl;
+                cout << endl;
             }
         }
         cout << endl;
         cout << "Seats Selected: " << endl;
-        for(int busID = 0; busID < MAX_BUSES; busID++){
-            if(client.busesSelected[busID] == 1){
+        for (int busID = 0; busID < MAX_BUSES; busID++)
+        {
+            if (client.busesSelected[busID] == 1)
+            {
                 cout << "BusID " << busID << " : ";
-                for(int seatNo = 0; seatNo < MAX_SEATS; seatNo++){
-                    if(client.seatsSelected[busID][seatNo] == 1){
-                        cout<< seatNo<< " ";
+                for (int seatNo = 0; seatNo < MAX_SEATS; seatNo++)
+                {
+                    if (client.seatsSelected[busID][seatNo] == 1)
+                    {
+                        cout << seatNo << " ";
                     }
                 }
-                cout<<endl;
+                cout << endl;
             }
         }
         cout << endl;
@@ -238,11 +248,10 @@ public:
         int busesExpansion = BUSES_TO_BE_ADDED - sharedData->numEmptyBuses;
         if (busesExpansion > 0)
         {
-            //
             for (int bus = 0; bus < sharedData->numEmptyBuses; bus++)
             {
                 int busid = sharedData->emptyBuses[bus];
-                fill(sharedData->buses[busid].seats, sharedData->buses[busid].seats + MAX_SEATS,1);
+                fill(sharedData->buses[busid].seats, sharedData->buses[busid].seats + MAX_SEATS, 1);
                 sharedData->buses[busid].active = true;
                 sharedData->buses[busid].bookedSeats = 0;
                 sharedData->buses[busid].loadExceeding = false;
@@ -255,7 +264,7 @@ public:
                 {
                     sharedData->buses[(sharedData->totalBuses)].seats[i] = 1;
                 }
-                fill(sharedData->buses[(sharedData->totalBuses)].seats, sharedData->buses[(sharedData->totalBuses)].seats + MAX_SEATS,1);
+                fill(sharedData->buses[(sharedData->totalBuses)].seats, sharedData->buses[(sharedData->totalBuses)].seats + MAX_SEATS, 1);
                 sharedData->buses[(sharedData->totalBuses)].active = true;
                 sharedData->buses[(sharedData->totalBuses)].bookedSeats = 0;
                 sharedData->buses[(sharedData->totalBuses)].loadExceeding = false;
@@ -271,7 +280,7 @@ public:
                 {
                     sharedData->buses[busid].seats[i] = 1;
                 }
-                fill(sharedData->buses[busid].seats, sharedData->buses[busid].seats + MAX_SEATS,1);
+                fill(sharedData->buses[busid].seats, sharedData->buses[busid].seats + MAX_SEATS, 1);
                 sharedData->buses[busid].active = true;
                 sharedData->buses[busid].bookedSeats = 0;
                 sharedData->buses[busid].loadExceeding = false;
@@ -343,10 +352,13 @@ public:
         return possibleBuses;
     }
 
-    int countSeats(int *arr){
+    int countSeats(int *arr)
+    {
         int c = 0;
-        for(int i = 0;i < MAX_SEATS; i++){
-            if(arr[i] == 1) c++;
+        for (int i = 0; i < MAX_SEATS; i++)
+        {
+            if (arr[i] == 1)
+                c++;
         }
         return c;
     }
@@ -385,7 +397,6 @@ public:
 
                 sharedData->seatToClientMap[bus2][seat] = -1;
                 sharedData->clients[clientID].seatsBooked[bus2][seat] = -1;
-
             }
         }
         sharedData->clients->busesBooked[bus2] = -1;
@@ -524,7 +535,8 @@ public:
         }
         else if (seatStatus == 2)
         {
-            sharedData->clients[clientID].seatsSelected[busID][seatNo] = -1;;
+            sharedData->clients[clientID].seatsSelected[busID][seatNo] = -1;
+            ;
             if (countSeats(sharedData->clients[clientID].seatsSelected[busID]) == 0)
             {
                 sharedData->clients[clientID].busesSelected[busID] = -1;
@@ -643,7 +655,7 @@ protected:
     }
 
 public:
-    Server(Data * sharedData) : BusBooking(sharedData){};
+    Server(Data *sharedData) : BusBooking(sharedData) {};
     void serveAdminSocket(int socket_fd)
     {
         logWriter("TRIGGERED SERVE ADMIN SOCKET socket_fd: " + to_string(socket_fd));
@@ -853,14 +865,6 @@ int main()
     // Initialize the BusBooking class with shared memory
     Server server(sharedData);
 
-    // thread loggerThread([]()
-    //                     {
-    //     while (true) {
-    //         logFileWriter(); // calling log func every 3 seconds to log all activities
-    //         std::this_thread::sleep_for(std::chrono::seconds(3)); 
-    //     } });
-    // loggerThread.detach();
-
     int server_fd, new_socket;
     struct sockaddr_in address;
     int addrlen = sizeof(address);
@@ -900,7 +904,6 @@ int main()
 
     cout << "BUS BOOKING SYSTEM SERVER RUNNING" << endl;
 
-
     // Timer thread for periodic server tasks
     thread timerThread([&server]()
                        {
@@ -921,12 +924,11 @@ int main()
         {
             perror("accept");
             logWriter("FAILED CONNECTING TO CLIENT");
-            continue; // Log the error and continue accepting other clients
+            continue;
         }
 
         cout << "Connection Accepted" << endl;
         logWriter("SUCCESS CLIENT CONNECTED");
-        // Fork a new process for each client connection
 
         pid_t pid = fork();
 
@@ -939,7 +941,6 @@ int main()
         }
         else if (pid == 0)
         {
-            // Child process: handle client request
             close(server_fd); // Child doesn't need the listening socket
 
             char buffer[MAX_BUFFER] = {0};
@@ -964,14 +965,13 @@ int main()
                 logWriter("FAILED INVALID MODE");
             }
 
-            close(new_socket); // Close socket after handling the client
+            close(new_socket);
             logWriter("SUCCESS CLIENT CONNECTION CLOSED");
-            exit(0); // Exit child process
+            exit(0);
         }
         else
         {
-            // Parent process: continue to accept new connections
-            close(new_socket); // Parent doesn't need this socket
+            close(new_socket);
         }
     }
 

@@ -7,10 +7,10 @@
 #include <arpa/inet.h>
 
 #define INITIAL_BUSES 20
-#define MAX_CLIENTS 1000
+#define MAX_CLIENTS 10000
 #define MAX_BUSES 100
 #define MAX_SEATS 30
-#define TIMER 60
+#define TIMER 30
 #define BUSES_TO_BE_ADDED 2
 #define LOAD_EXCEED_FACTOR 0.8
 #define LOAD_LESS_FACTOR 0.2
